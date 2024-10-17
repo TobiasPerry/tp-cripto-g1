@@ -1,3 +1,7 @@
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 public class Main {
     private static final String EMBED = "-embed";
     private static final String EXTRACT = "-extract";
@@ -60,16 +64,20 @@ public class Main {
         }
         verifyArgs();
         if(embed){
-            embed(in, p, out, steg, a, m, pass);
+            try {
+                embed(in, p, out, steg, a, m, pass);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }else{
             extract(p, out, steg, a, m, pass);
         }
 
     }
 
-    private static void embed(String in, String p, String out, String steg, String a, String m, String pass){
+    private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
         //call the embed function with the arguments
-        byte[] inBytes;
+        byte[] inFile = Files.readAllBytes(Path.of(in));
 
 //        stenograph(steg, out, p);
 
