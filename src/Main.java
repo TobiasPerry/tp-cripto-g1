@@ -1,3 +1,5 @@
+import utils.BMP;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -78,7 +80,7 @@ public class Main {
     private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
         //call the embed function with the arguments
         byte[] inFile = Files.readAllBytes(Path.of(in));
-
+        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
 //        stenograph(steg, out, p);
 
     }
