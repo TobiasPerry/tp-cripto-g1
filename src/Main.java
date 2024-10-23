@@ -1,8 +1,11 @@
 import utils.BMP;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+
+import static utils.Utils.prepareFileForStenographyWithoutEncryption;
 
 public class Main {
     private static final String EMBED = "-embed";
@@ -80,9 +83,25 @@ public class Main {
     private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
         //call the embed function with the arguments
         byte[] inFile = Files.readAllBytes(Path.of(in));
-        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
-//        stenograph(steg, out, p);
 
+        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
+        byte[] bytesToStenograph;
+
+        if (a == null){ //No encryption
+            bytesToStenograph = prepareFileForStenographyWithoutEncryption(inFile, in);
+        } else {
+            switch (a){
+                case "aes128":
+                    break;
+                case "aes192":
+                    break;
+                case "aes256":
+                    break;
+                case "des":
+                    break;
+            }
+        }
+//        stenograph(steg, out, p);
     }
     private static void extract(String p, String out, String steg, String a, String m, String pass){
         //call the extract function with the arguments

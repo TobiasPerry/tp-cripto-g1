@@ -1,5 +1,6 @@
 package steganography;
 
+import java.io.File;
 import java.io.IOException;
 
 public interface SteganographyInterface {
@@ -21,4 +22,5 @@ public interface SteganographyInterface {
      * @throws IOException If there's an error handling the image
      */
     String decode(String imagePath) throws IOException;
+
 }
