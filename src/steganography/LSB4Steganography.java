@@ -9,35 +9,34 @@ import java.nio.charset.StandardCharsets;
 public final class LSB4Steganography implements SteganographyInterface {
 
     @Override
-    public void encode(String imagePath, String message, String outputPath) throws IOException {
-        BufferedImage image = ImageIO.read(new File(imagePath));
-        String binaryMessage = textToBinary(message);
+    public void encode(String coverImagePath, byte[] data, String outputPath) throws IOException {
+        BufferedImage image = ImageIO.read(new File(coverImagePath));
+        String binaryData = bytesToBinary(data);
 
         // For LSB4, we need 4 times less pixels than bits
-        if (binaryMessage.length() > image.getWidth() * image.getHeight() * 4) {
-            throw new IllegalArgumentException("Message too large for image");
+        if (binaryData.length() > image.getWidth() * image.getHeight() * 4) {
+            throw new IllegalArgumentException("Data too large for cover image");
         }
 
         int messageIndex = 0;
         outer:
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
-                if (messageIndex >= binaryMessage.length()) {
+                if (messageIndex >= binaryData.length()) {
                     break outer;
                 }
 
                 int pixel = image.getRGB(x, y);
-                // Take next 4 bits from message
-                String fourBits = binaryMessage.substring(
+                String fourBits = binaryData.substring(
                         messageIndex,
-                        Math.min(messageIndex + 4, binaryMessage.length())
+                        Math.min(messageIndex + 4, binaryData.length())
                 );
+
                 // Pad with zeros if less than 4 bits
                 while (fourBits.length() < 4) {
                     fourBits += "0";
                 }
 
-                // Clear 4 LSBs and set them to our message bits
                 pixel = (pixel & ~0xF) | Integer.parseInt(fourBits, 2);
                 image.setRGB(x, y, pixel);
                 messageIndex += 4;
@@ -48,32 +47,28 @@ public final class LSB4Steganography implements SteganographyInterface {
     }
 
     @Override
-    public String decode(String imagePath) throws IOException {
-        BufferedImage image = ImageIO.read(new File(imagePath));
+    public byte[] decode(String stegoImagePath) throws IOException {
+        BufferedImage image = ImageIO.read(new File(stegoImagePath));
         StringBuilder binaryMessage = new StringBuilder();
 
         outer:
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
                 int pixel = image.getRGB(x, y);
-                // Extract 4 LSBs
                 String fourBits = String.format("%4s",
                                 Integer.toBinaryString(pixel & 0xF))
                         .replace(' ', '0');
                 binaryMessage.append(fourBits);
 
-                // Try to decode the message at each step
-                try {
-                    String message = binaryToText(binaryMessage.toString());
-                    if (message != null && !message.isEmpty()) {
-                        return message;
+                // Check for delimiter every 8 bits
+                if (binaryMessage.length() % 8 == 0 && binaryMessage.length() >= DELIMITER.length * 8) {
+                    byte[] currentBytes = binaryToBytes(binaryMessage.toString());
+                    if (currentBytes != null) {
+                        return currentBytes;
                     }
-                } catch (Exception ignored) {
-                    // Continue if we can't decode yet
                 }
 
-                // Break if we've collected too many bits
-                if (binaryMessage.length() > 1_000_000) {
+                if (binaryMessage.length() > 10_000_000) { // Safety limit
                     break outer;
                 }
             }

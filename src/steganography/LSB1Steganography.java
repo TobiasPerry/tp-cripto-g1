@@ -9,19 +9,20 @@ import java.nio.charset.StandardCharsets;
 public final class LSB1Steganography implements SteganographyInterface {
 
     @Override
-    public void encode(String imagePath, String message, String outputPath) throws IOException {
-        BufferedImage image = ImageIO.read(new File(imagePath));
-        String binaryMessage = textToBinary(message);
+    public void encode(String coverImagePath, byte[] data, String outputPath) throws IOException {
+        BufferedImage image = ImageIO.read(new File(coverImagePath));
+        String binaryData = bytesToBinary(data);
 
-        if (binaryMessage.length() > image.getWidth() * image.getHeight()) {
-            throw new IllegalArgumentException("Message too large for image");
+        // Check if the image can hold the data
+        if (binaryData.length() > image.getWidth() * image.getHeight()) {
+            throw new IllegalArgumentException("Data too large for cover image");
         }
 
         int messageIndex = 0;
-        for (int y = 0; y < image.getHeight() && messageIndex < binaryMessage.length(); y++) {
-            for (int x = 0; x < image.getWidth() && messageIndex < binaryMessage.length(); x++) {
+        for (int y = 0; y < image.getHeight() && messageIndex < binaryData.length(); y++) {
+            for (int x = 0; x < image.getWidth() && messageIndex < binaryData.length(); x++) {
                 int pixel = image.getRGB(x, y);
-                pixel = (pixel & ~1) | Character.getNumericValue(binaryMessage.charAt(messageIndex));
+                pixel = (pixel & ~1) | Character.getNumericValue(binaryData.charAt(messageIndex));
                 image.setRGB(x, y, pixel);
                 messageIndex++;
             }
@@ -31,29 +32,25 @@ public final class LSB1Steganography implements SteganographyInterface {
     }
 
     @Override
-    public String decode(String imagePath) throws IOException {
-        BufferedImage image = ImageIO.read(new File(imagePath));
+    public byte[] decode(String stegoImagePath) throws IOException {
+        BufferedImage image = ImageIO.read(new File(stegoImagePath));
         StringBuilder binaryMessage = new StringBuilder();
 
-        // Extract LSBs until we find the delimiter or reach the end
         outer:
         for (int y = 0; y < image.getHeight(); y++) {
             for (int x = 0; x < image.getWidth(); x++) {
                 int pixel = image.getRGB(x, y);
                 binaryMessage.append(pixel & 1);
 
-                // Try to decode the message at each step
-                try {
-                    String message = binaryToText(binaryMessage.toString());
-                    if (message != null && !message.isEmpty()) {
-                        return message;
+                // Check for delimiter every 8 bits
+                if (binaryMessage.length() % 8 == 0 && binaryMessage.length() >= DELIMITER.length * 8) {
+                    byte[] currentBytes = binaryToBytes(binaryMessage.toString());
+                    if (currentBytes != null) {
+                        return currentBytes;
                     }
-                } catch (Exception ignored) {
-                    // Continue if we can't decode yet
                 }
 
-                // Break if we've collected too many bits
-                if (binaryMessage.length() > 1_000_000) {
+                if (binaryMessage.length() > 10_000_000) { // Safety limit
                     break outer;
                 }
             }
