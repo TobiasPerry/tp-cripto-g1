@@ -1,3 +1,4 @@
+import steganography.LSB1Steganography;
 import utils.BMP;
 
 import java.io.File;
@@ -85,7 +86,7 @@ public class Main {
         byte[] inFile = Files.readAllBytes(Path.of(in));
 
         BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
-        byte[] bytesToStenograph;
+        byte[] bytesToStenograph = new byte[0];
 
         if (a == null){ //No encryption
             bytesToStenograph = prepareFileForStenographyWithoutEncryption(inFile, in);
@@ -100,6 +101,17 @@ public class Main {
                 case "des":
                     break;
             }
+        }
+        
+        switch (steg){
+            case "LSB1":
+                LSB1Steganography lsb1 = new LSB1Steganography();
+                lsb1.encode(p, bytesToStenograph, out);
+                break;
+            case "LSB4":
+                break;
+            case "LSBI":
+                break;
         }
 //        stenograph(steg, out, p);
     }
