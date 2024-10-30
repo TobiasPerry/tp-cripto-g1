@@ -15,7 +15,7 @@ public sealed interface SteganographyInterface permits LSB1Steganography, LSB4St
      * @param outputPath Path for the output image
      * @throws IOException If there's an error handling the image
      */
-    void encode(String coverImagePath, byte[] data, String outputPath) throws IOException;
+    void encode(String coverImagePath, String dataPath, String outputPath) throws IOException;
 
     /**
      * Decodes a byte array from an image
@@ -24,6 +24,14 @@ public sealed interface SteganographyInterface permits LSB1Steganography, LSB4St
      * @throws IOException If there's an error handling the image
      */
     byte[] decode(String stegoImagePath) throws IOException;
+
+    /**
+     *
+     * @param stegoImagePath
+     * @return
+     * @throws IOException
+     */
+    String getFileExtension(String stegoImagePath) throws IOException;
 
     /**
      * Converts byte array to binary string

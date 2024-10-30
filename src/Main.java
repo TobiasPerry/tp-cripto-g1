@@ -1,12 +1,15 @@
 import steganography.LSB1Steganography;
+import steganography.LSB4Steganography;
+import steganography.SteganographyInterface;
 import utils.BMP;
+import utils.Utils;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static utils.Utils.prepareFileForStenographyWithoutEncryption;
+import static utils.Utils.getFileExtensionFromPath;
 
 public class Main {
     private static final String EMBED = "-embed";
@@ -30,7 +33,7 @@ public class Main {
 
 
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws IOException {
         //java -classpath ./target/classes ar.edu.itba.Main -embed -in <file> -p <in.bmp> -out <out.bmp> -steg <LSB1|LSB4|LSBI> [-a <aes128|aes192|aes256|des>] [-m <cbc|cfb|ofb|ecb>] [-pass <password>]
         //java -classpath ./target/classes ar.edu.itba.Main -extract -p <in.bmp> -out <file_name> -steg <LSB1|LSB4|LSBI> [-a <aes128|aes192|aes256|des>] [-m <cbc|cfb|ofb|ecb>] [-pass <password>]
         //i need to extract the arguments from the command line and save them in variables
@@ -81,15 +84,21 @@ public class Main {
 
     }
 
-    private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
-        //call the embed function with the arguments
-        byte[] inFile = Files.readAllBytes(Path.of(in));
+    private static SteganographyInterface getSteg(String steg){
+        switch (steg){
+            case "LSB1":
+                return new LSB1Steganography();
+            case "LSB4":
+                return new LSB4Steganography();
+            case "LSBI":
+                throw  new IllegalArgumentException("Not implemented yet");
+        }
+        throw new IllegalArgumentException("Not a valid Stenograph");
+    }
 
-        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
-        byte[] bytesToStenograph = new byte[0];
+    private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
 
         if (a == null){ //No encryption
-            bytesToStenograph = prepareFileForStenographyWithoutEncryption(inFile, in);
         } else {
             switch (a){
                 case "aes128":
@@ -102,21 +111,19 @@ public class Main {
                     break;
             }
         }
-        
-        switch (steg){
-            case "LSB1":
-                LSB1Steganography lsb1 = new LSB1Steganography();
-                lsb1.encode(p, bytesToStenograph, out);
-                break;
-            case "LSB4":
-                break;
-            case "LSBI":
-                break;
-        }
-//        stenograph(steg, out, p);
+
+        SteganographyInterface lsb = getSteg(steg);
+        lsb.encode(p, in, out);
     }
-    private static void extract(String p, String out, String steg, String a, String m, String pass){
-        //call the extract function with the arguments
+
+    private static void extract(String p, String out, String steg, String a, String m, String pass) throws IOException {
+        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
+
+        SteganographyInterface lsb = getSteg(steg);
+        byte[] outputBytes = lsb.decode(p);
+        String fileExtension = lsb.getFileExtension(p);
+        saveFile(outputBytes, out, fileExtension);
+
     }
 
     private static void verifyArgs(){//mejorar
@@ -132,5 +139,14 @@ public class Main {
             }
         }
 
+    }
+
+    private static void saveFile(byte[] bytes, String fileName, String fileExtension) throws IOException {
+        String filePath = fileName + fileExtension;
+        File file = new File(filePath);
+
+        try (FileOutputStream fos = new FileOutputStream(file)) {
+            fos.write(bytes);
+        }
     }
 }
