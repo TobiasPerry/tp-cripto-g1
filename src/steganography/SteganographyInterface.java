@@ -5,7 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 
-public sealed interface SteganographyInterface permits LSB1Steganography, LSB4Steganography {
+public sealed interface SteganographyInterface permits LSB1Steganography, LSB4Steganography, LSBISteganography {
     byte[] DELIMITER = {0, 1, 2, 3, 4}; // Unique byte sequence as delimiter
 
     /**
