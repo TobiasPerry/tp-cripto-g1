@@ -1,6 +1,7 @@
 import cryptography.Crypto;
 import steganography.LSB1Steganography;
 import steganography.LSB4Steganography;
+import steganography.LSBISteganography;
 import steganography.SteganographyInterface;
 import java.io.*;
 import java.nio.file.Files;
@@ -73,7 +74,7 @@ public class Main {
             case "LSB4":
                 return new LSB4Steganography();
             case "LSBI":
-                throw new IllegalArgumentException("Not implemented yet");
+                return new LSBISteganography();
         }
         throw new IllegalArgumentException("Not a valid Steganography method");
     }

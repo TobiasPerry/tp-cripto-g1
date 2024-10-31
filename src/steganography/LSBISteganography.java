@@ -35,13 +35,13 @@ public final class LSBISteganography implements SteganographyInterface {
             throw new IllegalArgumentException("Data too large for cover image");
         }
 
-        insertDataLSBI(data, pixelDataOffset,imageBytes);
+        byte[] newImage = insertDataLSBI(data, pixelDataOffset,imageBytes);
 
         // Write the modified image bytes to the output file
-        Files.write(new File(outputPath).toPath(), imageBytes);
+        Files.write(new File(outputPath).toPath(), newImage);
     }
 
-    private void insertDataLSBI(byte[] dataToCover, int imageByteOffset, byte[] coverImageBytes) {
+    private byte[] insertDataLSBI(byte[] dataToCover, int imageByteOffset, byte[] coverImageBytes) {
         // Map to count changes for each pattern. + 0 for changed, +100 for not changed
         Map<Integer, Integer> changeCountMap = new HashMap<>();
         int messageIndex = 0;  // Index for tracking position in the secretMessage array
@@ -97,7 +97,9 @@ public final class LSBISteganography implements SteganographyInterface {
 
             // Replace values in the cover image
             coverImageBytes[i] = (byte) blue;    // Update blue channel
+//            System.out.println(blue);
             coverImageBytes[i + 1] = (byte) green; // Update green channel
+//            System.out.println(green);
 
 //            // Store the new patterns
 //            int newGreenPattern = (green >> 1) & 0b11;
@@ -143,6 +145,7 @@ public final class LSBISteganography implements SteganographyInterface {
                 }
             }
         }
+        return coverImageBytes;
     }
 
         // Optional: Store inversion map data for future decoding
