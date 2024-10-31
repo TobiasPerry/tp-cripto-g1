@@ -2,8 +2,10 @@ package steganography;
 
 import utils.Utils;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -14,11 +16,9 @@ public final class LSB4Steganography implements SteganographyInterface {
     private static final int BITS_TO_EMBED = 4; // Number of bits to embed per byte
 
     @Override
-    public void encode(String coverImagePath, String dataPath, String outputPath) throws IOException {
+    public void encode(String coverImagePath, byte[] data, String outputPath) throws IOException {
         // Read the BMP image as a byte array
         byte[] imageBytes = Files.readAllBytes(new File(coverImagePath).toPath());
-        byte[] data = Files.readAllBytes(Path.of(dataPath));
-        String fileExtension = Utils.getFileExtensionFromPath(dataPath) + "\0"; // Add null terminator
 
         // Get the pixel data starting offset from the BMP header (bytes 10 to 13)
         int pixelDataOffset = ((imageBytes[10] & 0xFF)) |
@@ -29,20 +29,8 @@ public final class LSB4Steganography implements SteganographyInterface {
         // Calculate the number of bits available for embedding data
         int availableBits = (imageBytes.length - pixelDataOffset) * BITS_TO_EMBED;
 
-        // Prepare the data to hide: file size (4 bytes), actual data, file extension (ending with '\0')
-        int dataLength = data.length;
-
-        // Convert data length to 4 bytes (little-endian order)
-        byte[] dataLengthBytes = new byte[4];
-        dataLengthBytes[0] = (byte)(dataLength & 0xFF);
-        dataLengthBytes[1] = (byte)((dataLength >> 8) & 0xFF);
-        dataLengthBytes[2] = (byte)((dataLength >> 16) & 0xFF);
-        dataLengthBytes[3] = (byte)((dataLength >> 24) & 0xFF);
-
-        byte[] extensionBytes = fileExtension.getBytes();
-
         // Calculate the total number of bits required for embedding
-        int totalDataBits = (dataLengthBytes.length + data.length + extensionBytes.length) * BITS_IN_BYTE;
+        int totalDataBits = data.length * BITS_IN_BYTE;
 
         // Check if the cover image has enough space
         if (totalDataBits > availableBits) {
@@ -53,30 +41,11 @@ public final class LSB4Steganography implements SteganographyInterface {
 
         // **Embedding Process**
 
-        // 1. Embed the file size (32 bits)
-        for (byte b : dataLengthBytes) {
-            for (int i = 0; i < BITS_IN_BYTE; i += BITS_TO_EMBED) {
-                int bits = (b >> i) & 0x0F; // Get 4 bits
-                // Set the 4 LSBs of the current image byte
-                imageBytes[imageByteOffset] = (byte)((imageBytes[imageByteOffset] & 0xF0) | bits);
-                imageByteOffset++;
-            }
-        }
-
-        // 2. Embed the actual data
+        // 1. Embed the file size (32 bi        // 2. Embed the actual data
         for (byte b : data) {
             for (int i = 0; i < BITS_IN_BYTE; i += BITS_TO_EMBED) {
-                int bits = (b >> (BITS_IN_BYTE - BITS_TO_EMBED - i)) & 0x0F; // Big-endian order
-                imageBytes[imageByteOffset] = (byte)((imageBytes[imageByteOffset] & 0xF0) | bits);
-                imageByteOffset++;
-            }
-        }
-
-        // 3. Embed the file extension
-        for (byte b : extensionBytes) {
-            for (int i = 0; i < BITS_IN_BYTE; i += BITS_TO_EMBED) {
-                int bits = (b >> (BITS_IN_BYTE - BITS_TO_EMBED - i)) & 0x0F; // Big-endian order
-                imageBytes[imageByteOffset] = (byte)((imageBytes[imageByteOffset] & 0xF0) | bits);
+                int bits = (b >> (BITS_IN_BYTE - BITS_TO_EMBED - i)) & 0x0F;
+                imageBytes[imageByteOffset] = (byte) ((imageBytes[imageByteOffset] & 0xF0) | bits);
                 imageByteOffset++;
             }
         }
@@ -98,47 +67,43 @@ public final class LSB4Steganography implements SteganographyInterface {
 
         int imageByteOffset = pixelDataOffset;
 
-        // **Decoding Process**
 
-        // 1. Extract the file size (first 32 bits)
-        int fileSize = 0;
-        for (int i = 0; i < 4; i++) {
-            int b = 0;
-            for (int j = 0; j < BITS_IN_BYTE; j += BITS_TO_EMBED) {
-                int bits = imageBytes[imageByteOffset] & 0x0F;
-                b |= (bits << j);
-                imageByteOffset++;
+        // Extract the embedded data
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        int bitCount = 0;
+        int currentByte = 0;
+
+        while (imageByteOffset < imageBytes.length) {
+            // Extract the 4 LSBs from the current image byte
+            int bits = imageBytes[imageByteOffset] & 0x0F;
+            currentByte = (currentByte << BITS_TO_EMBED) | bits;
+            bitCount += BITS_TO_EMBED;
+
+            while (bitCount >= 8) {
+                // Extract the top 8 bits from currentByte
+                int byteToWrite = (currentByte >> (bitCount - BITS_IN_BYTE)) & 0xFF;
+                baos.write(byteToWrite);
+                bitCount -= 8;
+                // Keep the remaining bits in currentByte
+                currentByte = currentByte & ((1 << bitCount) - 1);
             }
-            fileSize |= (b << (i * 8)); // Little-endian order
+
+            imageByteOffset++;
         }
 
-        // Validate the file size
-        if (fileSize <= 0 || fileSize > (imageBytes.length - imageByteOffset) * BITS_TO_EMBED / BITS_IN_BYTE) {
-            throw new IllegalArgumentException("Invalid file size extracted");
-        }
+        // The extracted data
+        byte[] extractedData = baos.toByteArray();
 
-        byte[] data = new byte[fileSize];
-
-        // 2. Extract the actual data
-        for (int i = 0; i < fileSize; i++) {
-            int b = 0;
-            for (int j = 0; j < BITS_IN_BYTE; j += BITS_TO_EMBED) {
-                int bits = imageBytes[imageByteOffset] & 0x0F;
-                b = (b << BITS_TO_EMBED) | bits; // Big-endian order
-                imageByteOffset++;
-            }
-            data[i] = (byte) b;
-        }
-
-        return data;
+        return extractedData;
     }
+
 
     @Override
     public String getFileExtension(String stegoImagePath) throws IOException {
         // Read the stego image as a byte array
-        byte[] imageBytes = Files.readAllBytes(new File(stegoImagePath).toPath());
+        byte[] imageBytes = Files.readAllBytes(Path.of(stegoImagePath));
 
-        // Get the pixel data starting offset
+        // Get the pixel data starting offset from the BMP header (bytes 10 to 13)
         int pixelDataOffset = ((imageBytes[10] & 0xFF)) |
                 ((imageBytes[11] & 0xFF) << 8) |
                 ((imageBytes[12] & 0xFF) << 16) |
@@ -146,41 +111,51 @@ public final class LSB4Steganography implements SteganographyInterface {
 
         int imageByteOffset = pixelDataOffset;
 
-        // **Extension Extraction Process**
+        // **Extraction Process**
 
-        // 1. Extract the file size (first 32 bits)
-        int fileSize = 0;
-        for (int i = 0; i < 4; i++) {
-            int b = 0;
-            for (int j = 0; j < BITS_IN_BYTE; j += BITS_TO_EMBED) {
-                int bits = imageBytes[imageByteOffset] & 0x0F;
-                b |= (bits << j);
+        // 1. Extract the file size (32 bits)
+        byte[] dataLengthBytes = new byte[4];
+        for (int b = 0; b < dataLengthBytes.length; b++) {
+            int combinedByte = 0;
+            for (int i = 0; i < BITS_IN_BYTE; i += BITS_TO_EMBED) {
+                int bits = imageBytes[imageByteOffset] & 0x0F; // Get the lower 4 bits
+                combinedByte |= (bits << i);
                 imageByteOffset++;
             }
-            fileSize |= (b << (i * 8)); // Little-endian order
+            dataLengthBytes[b] = (byte) combinedByte;
         }
 
-        // Skip over the data bits
-        imageByteOffset += (fileSize * BITS_IN_BYTE) / BITS_TO_EMBED;
+        // Convert the byte array to an integer (big-endian order)
+        int dataLength = ((dataLengthBytes[0] & 0xFF) << 24) |
+                ((dataLengthBytes[1] & 0xFF) << 16) |
+                ((dataLengthBytes[2] & 0xFF) << 8) |
+                (dataLengthBytes[3] & 0xFF);
 
-        // 2. Extract the file extension
-        StringBuilder extension = new StringBuilder();
-        while (true) {
-            int b = 0;
-            for (int j = 0; j < BITS_IN_BYTE; j += BITS_TO_EMBED) {
-                if (imageByteOffset >= imageBytes.length) {
-                    throw new IllegalArgumentException("Not enough data in image to extract file extension");
-                }
+        // 2. Skip over the embedded data
+        int dataBytesToSkip = dataLength * (BITS_IN_BYTE / BITS_TO_EMBED);
+        imageByteOffset += dataBytesToSkip;
+
+        // 3. Extract the file extension
+        ByteArrayOutputStream extensionStream = new ByteArrayOutputStream();
+        boolean nullTerminatorFound = false;
+
+        while (!nullTerminatorFound) {
+            int combinedByte = 0;
+            for (int i = BITS_IN_BYTE - BITS_TO_EMBED; i >= 0; i -= BITS_TO_EMBED) {
                 int bits = imageBytes[imageByteOffset] & 0x0F;
-                b = (b << BITS_TO_EMBED) | bits; // Big-endian order
+                combinedByte |= (bits << i);
                 imageByteOffset++;
             }
-            if (b == 0) {
-                break; // Null terminator found
+            if (combinedByte == 0) {
+                nullTerminatorFound = true;
+            } else {
+                extensionStream.write(combinedByte);
             }
-            extension.append((char) b);
         }
 
-        return extension.toString();
+        // Convert the extension bytes to a string
+        String fileExtension = new String(extensionStream.toByteArray(), StandardCharsets.UTF_8);
+
+        return fileExtension;
     }
 }

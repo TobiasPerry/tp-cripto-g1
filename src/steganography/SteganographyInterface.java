@@ -5,7 +5,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 
-public sealed interface SteganographyInterface permits LSB1Steganography, LSB4Steganography, LSBISteganography {
+public sealed interface SteganographyInterface permits LSB1Steganography, LSB4Steganography {
     byte[] DELIMITER = {0, 1, 2, 3, 4}; // Unique byte sequence as delimiter
 
     /**
@@ -15,7 +15,7 @@ public sealed interface SteganographyInterface permits LSB1Steganography, LSB4St
      * @param outputPath Path for the output image
      * @throws IOException If there's an error handling the image
      */
-    void encode(String coverImagePath, String dataPath, String outputPath) throws IOException;
+    void encode(String coverImagePath, byte[] data, String outputPath) throws IOException;
 
     /**
      * Decodes a byte array from an image

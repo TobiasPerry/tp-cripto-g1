@@ -1,16 +1,10 @@
+import cryptography.Crypto;
 import steganography.LSB1Steganography;
 import steganography.LSB4Steganography;
-import steganography.LSBISteganography;
 import steganography.SteganographyInterface;
-import utils.BMP;
-import utils.Utils;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import static utils.Utils.getFileExtensionFromPath;
 
 public class Main {
     private static final String EMBED = "-embed";
@@ -30,116 +24,181 @@ public class Main {
     private static String a;
     private static String m;
     private static String pass;
-    private static boolean embed =false;
+    private static boolean embed = false;
 
-
-
-    public static void main(String[] args) throws IOException {
-        //java -classpath ./target/classes ar.edu.itba.Main -embed -in <file> -p <in.bmp> -out <out.bmp> -steg <LSB1|LSB4|LSBI> [-a <aes128|aes192|aes256|des>] [-m <cbc|cfb|ofb|ecb>] [-pass <password>]
-        //java -classpath ./target/classes ar.edu.itba.Main -extract -p <in.bmp> -out <file_name> -steg <LSB1|LSB4|LSBI> [-a <aes128|aes192|aes256|des>] [-m <cbc|cfb|ofb|ecb>] [-pass <password>]
-        //i need to extract the arguments from the command line and save them in variables
-        //then i need to call the corresponding function with the corresponding arguments
-
-        //extract the arguments from the command line
-        for(int i = 0; i < args.length; i++){
-            switch(args[i]){
+    public static void main(String[] args) throws Exception {
+        // Process command-line arguments
+        for (int i = 0; i < args.length; i++) {
+            switch (args[i]) {
                 case EMBED:
-                    embed=true;
+                    embed = true;
                     break;
                 case EXTRACT:
                     break;
                 case IN:
-                    in = args[i+1];
+                    in = args[i + 1];
                     break;
                 case P:
-                    p = args[i+1];
+                    p = args[i + 1];
                     break;
                 case OUT:
-                    out = args[i+1];
+                    out = args[i + 1];
                     break;
                 case STEG:
-                    steg = args[i+1];
+                    steg = args[i + 1];
                     break;
                 case A:
-                    a = args[i+1];
+                    a = args[i + 1];
                     break;
                 case M:
-                    m = args[i+1];
+                    m = args[i + 1];
                     break;
                 case PASS:
-                    pass = args[i+1];
+                    pass = args[i + 1];
                     break;
             }
-
         }
         verifyArgs();
-        if(embed){
-            try {
-                embed(in, p, out, steg, a, m, pass);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }else{
+        if (embed) {
+            embed(in, p, out, steg, a, m, pass);
+        } else {
             extract(p, out, steg, a, m, pass);
         }
-
     }
 
-    private static SteganographyInterface getSteg(String steg){
-        switch (steg){
+    private static SteganographyInterface getSteg(String steg) {
+        switch (steg) {
             case "LSB1":
                 return new LSB1Steganography();
             case "LSB4":
                 return new LSB4Steganography();
             case "LSBI":
-                return  new LSBISteganography();
+                throw new IllegalArgumentException("Not implemented yet");
         }
-        throw new IllegalArgumentException("Not a valid Stenograph");
+        throw new IllegalArgumentException("Not a valid Steganography method");
     }
 
-    private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws IOException {
+    private static void embed(String in, String p, String out, String steg, String a, String m, String pass) throws Exception {
+        SteganographyInterface lsb = getSteg(steg);
 
-        if (a == null){ //No encryption
+        // Read the file to hide
+        byte[] fileData = Files.readAllBytes(Path.of(in));
+        int realSize = fileData.length;
+        String extension = getFileExtension(in);
+
+        // Build the sequence: real size || file data || extension
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(baos);
+
+        // Write real size (4 bytes, Big Endian)
+        dos.writeInt(realSize);
+        // Write file data
+        dos.write(fileData);
+        // Write extension with '.' and '\0'
+        String extWithDot = "." + extension + '\0';
+        dos.write(extWithDot.getBytes("UTF-8"));
+
+        dos.close();
+        byte[] dataToEncrypt = baos.toByteArray();
+
+        byte[] encryptedData;
+
+        if (a == null || m == null || pass == null) { // No encryption
+            encryptedData = dataToEncrypt;
         } else {
-            switch (a){
-                case "aes128":
-                    break;
-                case "aes192":
-                    break;
-                case "aes256":
-                    break;
-                case "des":
-                    break;
-            }
+            // Encrypt data using Cryptography class
+            Crypto crypto = new Crypto(a, m, pass);
+            encryptedData = crypto.encryptData(dataToEncrypt);
         }
 
-        SteganographyInterface lsb = getSteg(steg);
-        lsb.encode(p, in, out);
+        // Get the size of the ciphertext
+        int ciphertextSize = encryptedData.length;
+
+        // Build data to hide: ciphertext size || encrypted data
+        ByteArrayOutputStream baosSteg = new ByteArrayOutputStream();
+        DataOutputStream dosSteg = new DataOutputStream(baosSteg);
+        dosSteg.writeInt(ciphertextSize);
+        dosSteg.write(encryptedData);
+
+        dosSteg.close();
+        byte[] dataToHide = baosSteg.toByteArray();
+
+        // Steganograph the data
+        lsb.encode(p, dataToHide, out);
     }
 
-    private static void extract(String p, String out, String steg, String a, String m, String pass) throws IOException {
-        BMP bmp = new BMP(Files.readAllBytes(Path.of(p)));
-
+    private static void extract(String p, String out, String steg, String a, String m, String pass) throws Exception {
         SteganographyInterface lsb = getSteg(steg);
-        byte[] outputBytes = lsb.decode(p);
-        String fileExtension = lsb.getFileExtension(p);
-        saveFile(outputBytes, out, fileExtension);
+        byte[] stegoData = lsb.decode(p);
 
+        byte[] decryptedData;
+
+        if (a == null || m == null || pass == null) { // No decryption
+            // Data is in the format: realSize || fileData || extension
+            decryptedData = stegoData;
+        } else {
+            // Data is in the format: ciphertextSize (4 bytes) || encryptedData
+            ByteArrayInputStream bais = new ByteArrayInputStream(stegoData);
+            DataInputStream dis = new DataInputStream(bais);
+
+            // Read the ciphertext size
+            int ciphertextSize = dis.readInt();
+            System.out.println("Ciphertext size: " + ciphertextSize);
+
+            // Read the encrypted data
+            byte[] encryptedData = new byte[ciphertextSize];
+            dis.readFully(encryptedData);
+
+            // Decrypt data using Cryptography class
+            Crypto crypto = new Crypto(a, m, pass);
+            decryptedData = crypto.decryptData(encryptedData);
+        }
+
+        // Now, decryptedData contains: realSize || fileData || extension
+
+        // Extract realSize, fileData, and extension from decryptedData
+        ByteArrayInputStream dataBais = new ByteArrayInputStream(decryptedData);
+        DataInputStream dataDis = new DataInputStream(dataBais);
+
+        int realSize = dataDis.readInt();
+        System.out.println("Real size: " + realSize);
+
+        if (realSize + 4 > decryptedData.length) {
+            throw new IllegalArgumentException("Real size is greater than the data size");
+        }
+
+        // Read the file data
+        byte[] fileData = new byte[realSize];
+        dataDis.readFully(fileData);
+
+        // Read the extension until '\0'
+        ByteArrayOutputStream extBaos = new ByteArrayOutputStream();
+        int b;
+        System.out.println("Reading extension");
+        while ((b = dataDis.read()) != -1 && b != 0) {
+            System.out.println("Read byte: " + b);
+            extBaos.write(b);
+        }
+        String extension = extBaos.toString("UTF-8");
+        System.out.println("Extracted extension: " + extension);
+
+        // Save the extracted file
+        saveFile(fileData, out, extension);
     }
 
-    private static void verifyArgs(){//mejorar
-        if(embed){
-            if(in == null || p == null || out == null || steg == null){
+
+    private static void verifyArgs() {
+        if (embed) {
+            if (in == null || p == null || out == null || steg == null) {
                 System.out.println("Missing arguments");
                 System.exit(1);
             }
-        }else{
-            if(p == null || out == null || steg == null){
+        } else {
+            if (p == null || out == null || steg == null) {
                 System.out.println("Missing arguments");
                 System.exit(1);
             }
         }
-
     }
 
     private static void saveFile(byte[] bytes, String fileName, String fileExtension) throws IOException {
@@ -149,5 +208,14 @@ public class Main {
         try (FileOutputStream fos = new FileOutputStream(file)) {
             fos.write(bytes);
         }
+    }
+
+    private static String getFileExtension(String filename) {
+        String ext = "";
+        int i = filename.lastIndexOf('.');
+        if (i > 0) {
+            ext = filename.substring(i);
+        }
+        return ext;
     }
 }
