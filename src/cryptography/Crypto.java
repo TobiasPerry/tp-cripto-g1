@@ -7,17 +7,17 @@ import javax.crypto.spec.*;
 
 public class Crypto {
 
-    private String algorithm;
-    private String mode;
-    private String password;
-    private byte[] salt;
+    private final String algorithm;
+    private final String mode;
+    private final String password;
+    private final byte[] salt;
     private int keyLength;
     private int ivLength;
     private String transformation;
 
     public Crypto(String algorithm, String mode, String password) {
-        this.algorithm = algorithm;
-        this.mode = mode;
+        this.algorithm = algorithm.toLowerCase();
+        this.mode = mode.toUpperCase();
         this.password = password;
         this.salt = new byte[8];
         Arrays.fill(salt, (byte) 0x00);
@@ -26,122 +26,71 @@ public class Crypto {
     }
 
     private void configureAlgorithm() {
+        // Configure key and IV lengths based on the algorithm
         switch (algorithm) {
-            case "aes128":
+            case "aes128" -> {
                 keyLength = 128;
-                ivLength = 128;
-                break;
-            case "aes192":
+                ivLength = 16;
+            }
+            case "aes192" -> {
                 keyLength = 192;
-                ivLength = 128;
-                break;
-            case "aes256":
+                ivLength = 16;
+            }
+            case "aes256" -> {
                 keyLength = 256;
-                ivLength = 128;
-                break;
-            case "des":
+                ivLength = 16;
+            }
+            case "des" -> {
                 keyLength = 64;
-                ivLength = 64;
-                break;
-            case "3des":
+                ivLength = 8;
+            }
+            case "3des" -> {
                 keyLength = 192;
-                ivLength = 64;
-                break;
-            default:
-                throw new IllegalArgumentException("Unsupported algorithm");
+                ivLength = 8;
+            }
+            default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         }
 
-        switch (algorithm) {
-            case "aes128":
-            case "aes192":
-            case "aes256":
-                switch (mode) {
-                    case "ecb":
-                        transformation = "AES/ECB/PKCS5Padding";
-                        break;
-                    case "cbc":
-                        transformation = "AES/CBC/PKCS5Padding";
-                        break;
-                    case "cfb":
-                        transformation = "AES/CFB/NoPadding";
-                        break;
-                    case "ofb":
-                        transformation = "AES/OFB/NoPadding";
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Unsupported mode");
-                }
-                break;
-            case "des":
-                switch (mode) {
-                    case "ecb":
-                        transformation = "DES/ECB/PKCS5Padding";
-                        break;
-                    case "cbc":
-                        transformation = "DES/CBC/PKCS5Padding";
-                        break;
-                    case "cfb":
-                        transformation = "DES/CFB/NoPadding";
-                        break;
-                    case "ofb":
-                        transformation = "DES/OFB/NoPadding";
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Unsupported mode");
-                }
-                break;
-            case "3des":
-                switch (mode) {
-                    case "ecb":
-                        transformation = "DESede/ECB/PKCS5Padding";
-                        break;
-                    case "cbc":
-                        transformation = "DESede/CBC/PKCS5Padding";
-                        break;
-                    case "cfb":
-                        transformation = "DESede/CFB/NoPadding";
-                        break;
-                    case "ofb":
-                        transformation = "DESede/OFB/NoPadding";
-                        break;
-                    default:
-                        throw new IllegalArgumentException("Unsupported mode");
-                }
-                break;
-        }
+        // Define padding type based on mode
+        String padding = (mode.equals("CFB") || mode.equals("OFB")) ? "NoPadding" : "PKCS5Padding";
+
+        // Construct the transformation string
+        transformation = switch (algorithm) {
+            case "aes128", "aes192", "aes256" -> String.format("AES/%s/%s", mode, padding);
+            case "des" -> String.format("DES/%s/%s", mode, padding);
+            case "3des" -> String.format("DESede/%s/%s", mode, padding);
+            default -> throw new IllegalArgumentException("Unsupported transformation configuration");
+        };
+    }
+
+    private SecretKey generateSecretKey(byte[] keyBytes) throws Exception {
+        return switch (algorithm) {
+            case "aes128", "aes192", "aes256" -> new SecretKeySpec(keyBytes, "AES");
+            case "des" -> new SecretKeySpec(keyBytes, "DES");
+            case "3des" -> new SecretKeySpec(keyBytes, "DESede");
+            default -> throw new IllegalArgumentException("Unsupported algorithm");
+        };
+    }
+
+    private byte[] deriveKeyAndIv() throws Exception {
+        // Generate key and IV using PBKDF2
+        int totalKeyLength = keyLength + (mode.equals("ECB") ? 0 : ivLength * 8);
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, totalKeyLength);
+        SecretKey tmp = factory.generateSecret(spec);
+        return tmp.getEncoded();
     }
 
     public byte[] encryptData(byte[] data) throws Exception {
-        int totalKeyLength = keyLength + ivLength;
-
-        // Generate key and IV using PBKDF2
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 1000, totalKeyLength);
-        SecretKey tmp = factory.generateSecret(spec);
-        byte[] keyAndIV = tmp.getEncoded();
-
-        // Separate key and IV
+        byte[] keyAndIV = deriveKeyAndIv();
         byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
-        byte[] ivBytes = Arrays.copyOfRange(keyAndIV, keyLength / 8, totalKeyLength / 8);
+        byte[] ivBytes = mode.equals("ECB") ? new byte[ivLength / 8] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength) / 8);
 
-        SecretKey key = null;
-        switch (algorithm) {
-            case "aes128":
-            case "aes192":
-            case "aes256":
-                key = new SecretKeySpec(keyBytes, "AES");
-                break;
-            case "des":
-                key = new SecretKeySpec(keyBytes, "DES");
-                break;
-            case "3des":
-                key = new SecretKeySpec(keyBytes, "DESede");
-                break;
-        }
-
+        SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
 
-        if (mode.equals("ecb")) {
+        // Initialize cipher based on mode
+        if ("ECB".equalsIgnoreCase(mode)) {
             cipher.init(Cipher.ENCRYPT_MODE, key);
         } else {
             IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
@@ -152,36 +101,15 @@ public class Crypto {
     }
 
     public byte[] decryptData(byte[] data) throws Exception {
-        int totalKeyLength = keyLength + ivLength;
-
-        // Generate key and IV using PBKDF2
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 1000, totalKeyLength);
-        SecretKey tmp = factory.generateSecret(spec);
-        byte[] keyAndIV = tmp.getEncoded();
-
-        // Separate key and IV
+        byte[] keyAndIV = deriveKeyAndIv();
         byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
-        byte[] ivBytes = Arrays.copyOfRange(keyAndIV, keyLength / 8, totalKeyLength / 8);
+        byte[] ivBytes = mode.equals("ECB") ? new byte[ivLength / 8] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength) / 8);
 
-        SecretKey key = null;
-        switch (algorithm) {
-            case "aes128":
-            case "aes192":
-            case "aes256":
-                key = new SecretKeySpec(keyBytes, "AES");
-                break;
-            case "des":
-                key = new SecretKeySpec(keyBytes, "DES");
-                break;
-            case "3des":
-                key = new SecretKeySpec(keyBytes, "DESede");
-                break;
-        }
-
+        SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
 
-        if (mode.equals("ecb")) {
+        // Initialize cipher based on mode
+        if ("ECB".equalsIgnoreCase(mode)) {
             cipher.init(Cipher.DECRYPT_MODE, key);
         } else {
             IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
