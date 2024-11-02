@@ -14,8 +14,6 @@ public final class LSBISteganography implements SteganographyInterface {
     private static final int INT_SIZE = 32; // Number of bits in an integer
     private static final int BITS_IN_BYTE = 8;
 
-    private static final Map<Integer, Boolean> changedPatterns = new HashMap<>();
-
     @Override
     public void encode(String coverImagePath, byte[] data, String outputPath) throws IOException {
         // Read the BMP image as a byte array
@@ -43,6 +41,7 @@ public final class LSBISteganography implements SteganographyInterface {
     private byte[] insertDataLSBI(byte[] dataToCover, int imageByteOffset, byte[] coverImageBytes) {
         // Map to count changes for each pattern. + 0 for changed, +100 for not changed
         Map<Integer, Integer> changeCountMap = new HashMap<>();
+
         int messageIndex = 0;
         int bitIndex = 0;
 
@@ -50,12 +49,14 @@ public final class LSBISteganography implements SteganographyInterface {
         int startOffset = imageByteOffset + 4;
 
         // First pass: Embed data and count changes
-        for (int i = startOffset; i < coverImageBytes.length - imageByteOffset && messageIndex < dataToCover.length; i += 3) {
-            int blue = coverImageBytes[i] & 0xFF;
-            int green = coverImageBytes[i + 1] & 0xFF;
+        for (int i = startOffset; i < coverImageBytes.length && messageIndex < dataToCover.length; i += 3) {
 
-            int bluePattern = (blue >> 1) & 0b11;
+            //After the 4 pattern bits, I am in a green channel
+            int green = coverImageBytes[i] & 0xFF;
+            int blue = coverImageBytes[i + 2] & 0xFF;
+
             int greenPattern = (green >> 1) & 0b11;
+            int bluePattern = (blue >> 1) & 0b11;
 
             changeCountMap.put(bluePattern, changeCountMap.getOrDefault(bluePattern, 0));
             changeCountMap.put(greenPattern, changeCountMap.getOrDefault(greenPattern, 0));
@@ -88,34 +89,37 @@ public final class LSBISteganography implements SteganographyInterface {
                 }
             }
 
-            coverImageBytes[i] = (byte) blue;
-            coverImageBytes[i + 1] = (byte) green;
+            coverImageBytes[i] = (byte) green;
+            coverImageBytes[i + 2] = (byte) blue;
         }
 
         // Store inversion state for each pattern in separate bytes
         for (int pattern = 0; pattern < 4; pattern++) {
             int changes = changeCountMap.getOrDefault(pattern, 0);
-            int nonChanges = changeCountMap.getOrDefault(pattern + 100, 0);
+                int nonChanges = changeCountMap.getOrDefault(pattern + 100, 0);
 
-            // Store 1 if pattern needs inversion (more changes than non-changes)
-            byte inversionState = (changes + nonChanges > 1 && changes > nonChanges) ? (byte)1 : (byte)0;
-            coverImageBytes[imageByteOffset + pattern] = inversionState;
+                // Store 1 if pattern needs inversion (more changes than non-changes)
+                byte inversionState = (changes + nonChanges > 1 && changes > nonChanges) ? (byte)1 : (byte)0;
+                coverImageBytes[imageByteOffset + pattern] = inversionState;
 
-            // If inversion is needed, invert all LSBs for this pattern
-            if (inversionState == 1) {
-                for (int i = startOffset; i < coverImageBytes.length - imageByteOffset; i += 3) {
-                    int blue = coverImageBytes[i] & 0xFF;
-                    int green = coverImageBytes[i + 1] & 0xFF;
+                // If inversion is needed, invert all LSBs for this pattern
+                if (inversionState == 1) {
+                    for (int i = startOffset; i < coverImageBytes.length; i += 3) {
+                    int green = coverImageBytes[i] & 0xFF;
 
-                    if (((blue >> 1) & 0b11) == pattern) {
-                        blue ^= 1;
-                    }
                     if (((green >> 1) & 0b11) == pattern) {
                         green ^= 1;
                     }
 
-                    coverImageBytes[i] = (byte) blue;
-                    coverImageBytes[i + 1] = (byte) green;
+                    if (i + 2 < coverImageBytes.length) {
+                        int blue = coverImageBytes[i + 2] & 0xFF;
+                        if (((blue >> 1) & 0b11) == pattern) {
+                            blue ^= 1;
+                        }
+                        coverImageBytes[i + 2] = (byte) blue;
+                    }
+
+                    coverImageBytes[i] = (byte) green;
                 }
             }
         }
