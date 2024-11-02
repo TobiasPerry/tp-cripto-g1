@@ -7,9 +7,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public final class LSBISteganography implements SteganographyInterface {
 
@@ -130,69 +128,63 @@ public final class LSBISteganography implements SteganographyInterface {
         // Read the stego image
         byte[] imageBytes = Files.readAllBytes(new File(stegoImagePath).toPath());
 
-        // Get the pixel data offset
+        // Get the pixel data offset from BMP header
         int pixelDataOffset = ((imageBytes[10] & 0xFF)) |
                 ((imageBytes[11] & 0xFF) << 8) |
                 ((imageBytes[12] & 0xFF) << 16) |
                 ((imageBytes[13] & 0xFF) << 24);
 
-        // Read pattern inversion information from the first 4 bytes
+        // Read pattern inversion information from the first 4 bytes of pixel data
         boolean[] patternInversion = new boolean[4];
         for (int i = 0; i < 4; i++) {
-            patternInversion[i] = imageBytes[pixelDataOffset + i] == 1;
+            patternInversion[i] = (imageBytes[pixelDataOffset + i] & 1) == 1;
         }
 
         // Skip the 4 bytes used for pattern information
         int startOffset = pixelDataOffset + 4;
 
-        // First pass: count total bits to determine output size
-        int totalBits = 0;
-        for (int i = startOffset; i < imageBytes.length - pixelDataOffset; i += 3) {
-            totalBits += 2; // 2 bits per pixel (1 in blue, 1 in green)
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        int bitCount = 0;
+        int currentByte = 0;
+        int pixelCounter = 0;
+
+        while (startOffset < imageBytes.length) {
+
+            // If we've read 1 bit from the pixel, skip the second (red channel because I am reading the first 3 bytes' LSBs)
+            if (pixelCounter % 3 == 1) {
+                startOffset++;
+                pixelCounter++;
+                continue;
+            }
+
+            int bit = imageBytes[startOffset] & 1;
+
+            int bitPattern = (imageBytes[startOffset] >> 1) & 0b11;
+
+            if (patternInversion[bitPattern]) {
+                bit ^= 1; // Invert if pattern is marked for inversion
+            }
+
+            currentByte = (currentByte << 1) | bit;
+            bitCount++;
+
+            if (bitCount == 8) {
+                baos.write(currentByte);
+                bitCount = 0;
+                currentByte = 0;
+            }
+
+            pixelCounter++;
+            startOffset++;
         }
 
-        // Create output array with the correct size
-        byte[] result = new byte[(totalBits + 7) / 8]; // Round up to nearest byte
-        int bitIndex = 0;
-        int byteIndex = 0;
+        // The extracted data
+        byte[] extractedData = baos.toByteArray();
 
-        // Extract the hidden data
-        for (int i = startOffset; i < imageBytes.length - pixelDataOffset && byteIndex < result.length; i += 3) {
-            int blue = imageBytes[i] & 0xFF;
-            int green = imageBytes[i + 1] & 0xFF;
 
-            // Check if we need to invert the LSB based on the pattern
-            int bluePattern = (blue >> 1) & 0b11;
-            int greenPattern = (green >> 1) & 0b11;
-
-            int blueBit = blue & 1;
-            int greenBit = green & 1;
-
-            // Invert bits if the pattern was marked for inversion
-            if (patternInversion[bluePattern]) {
-                blueBit ^= 1;
-            }
-            if (patternInversion[greenPattern]) {
-                greenBit ^= 1;
-            }
-
-            // Add bits to result
-            result[byteIndex] |= (greenBit << bitIndex);
-            bitIndex++;
-
-            if (bitIndex < 8 && byteIndex < result.length) {
-                result[byteIndex] |= (blueBit << bitIndex);
-                bitIndex++;
-            }
-
-            if (bitIndex == 8) {
-                bitIndex = 0;
-                byteIndex++;
-            }
-        }
-
-        return result;
+        return extractedData;
     }
+
 
     // Optional: Store inversion map data for future decoding
     // Encode the map at a specific location or as metadata if necessary.
