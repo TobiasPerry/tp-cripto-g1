@@ -95,34 +95,32 @@ public class Main {
         dos.writeInt(realSize);
         // Write file data
         dos.write(fileData);
-        // Write extension with '.' and '\0'
-        String extWithDot = "." + extension + '\0';
+        // Write extension with null terminator
+        String extWithDot = extension + '\0';
         dos.write(extWithDot.getBytes("UTF-8"));
 
         dos.close();
         byte[] dataToEncrypt = baos.toByteArray();
 
-        byte[] encryptedData;
+        byte[] dataToHide;
 
-        if (a == null || m == null || pass == null) { // No encryption
-            encryptedData = dataToEncrypt;
+        if (a == null || m == null || pass == null) {
+            // No encryption: Just use the data as is
+            dataToHide = dataToEncrypt;
         } else {
             // Encrypt data using Cryptography class
             Crypto crypto = new Crypto(a, m, pass);
-            encryptedData = crypto.encryptData(dataToEncrypt);
+            byte[] encryptedData = crypto.encryptData(dataToEncrypt);
+
+            // Build the sequence: ciphertext size || encrypted data
+            ByteArrayOutputStream baosSteg = new ByteArrayOutputStream();
+            DataOutputStream dosSteg = new DataOutputStream(baosSteg);
+            dosSteg.writeInt(encryptedData.length); // Ciphertext size in Big-Endian
+            dosSteg.write(encryptedData);           // Encrypted data
+
+            dosSteg.close();
+            dataToHide = baosSteg.toByteArray();
         }
-
-        // Get the size of the ciphertext
-        int ciphertextSize = encryptedData.length;
-
-        // Build data to hide: ciphertext size || encrypted data
-        ByteArrayOutputStream baosSteg = new ByteArrayOutputStream();
-        DataOutputStream dosSteg = new DataOutputStream(baosSteg);
-        dosSteg.writeInt(ciphertextSize);
-        dosSteg.write(encryptedData);
-
-        dosSteg.close();
-        byte[] dataToHide = baosSteg.toByteArray();
 
         // Steganograph the data
         lsb.encode(p, dataToHide, out);
