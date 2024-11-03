@@ -15,116 +15,107 @@ public final class LSBISteganography implements SteganographyInterface {
     private static final int BITS_IN_BYTE = 8;
 
     @Override
-    public void encode(String coverImagePath, byte[] data, String outputPath) throws IOException {
-        // Read the BMP image as a byte array
+    public void encode(String coverImagePath, byte[] secretData, String outputPath) throws IOException {
+        // Read the cover image
         byte[] imageBytes = Files.readAllBytes(new File(coverImagePath).toPath());
 
-        // Get the pixel data starting offset from the BMP header (bytes 10 to 13)
+        // Get the pixel data offset from BMP header
         int pixelDataOffset = ((imageBytes[10] & 0xFF)) |
                 ((imageBytes[11] & 0xFF) << 8) |
                 ((imageBytes[12] & 0xFF) << 16) |
                 ((imageBytes[13] & 0xFF) << 24);
 
-        int availableBits = (imageBytes.length - pixelDataOffset - 4) * 8; // Reserve 4 bytes for pattern info
+        // Create a copy of the image to modify
+        byte[] stegoImage = Arrays.copyOf(imageBytes, imageBytes.length);
 
-        int totalDataBits = data.length * 8;
-        if (totalDataBits > availableBits) {
-            throw new IllegalArgumentException("Data too large for cover image");
+        // We'll need to store 4 bits for pattern inversion flags
+        int availableCapacity = (imageBytes.length - pixelDataOffset - 4) * 2 / 3; // Only Blue and Green channels
+        if (secretData.length > availableCapacity) {
+            throw new IllegalArgumentException("Secret data is too large for this cover image");
         }
 
-        byte[] newImage = insertDataLSBI(data, pixelDataOffset, imageBytes);
+        // First, embed the secret data without pattern analysis
+        int startOffset = pixelDataOffset + 4; // Leave 4 bytes for pattern information
+        int pixelCounter = 0;
+        int secretBitIndex = 0;
 
-        // Write the modified image bytes to the output file
-        Files.write(new File(outputPath).toPath(), newImage);
-    }
+        // Arrays to count pattern statistics
+        int[][] patternStats = new int[4][2]; // [pattern][changed/unchanged]
 
-    private byte[] insertDataLSBI(byte[] dataToCover, int imageByteOffset, byte[] coverImageBytes) {
-        // Map to count changes for each pattern. + 0 for changed, +100 for not changed
-        Map<Integer, Integer> changeCountMap = new HashMap<>();
-
-        int messageIndex = 0;
-        int bitIndex = 0;
-
-        // Skip first 4 bytes of pixel data (will store pattern information here later)
-        int startOffset = imageByteOffset + 4;
-
-        // First pass: Embed data and count changes
-        for (int i = startOffset; i < coverImageBytes.length && messageIndex < dataToCover.length; i += 3) {
-
-            //After the 4 pattern bits, I am in a green channel
-            int green = coverImageBytes[i] & 0xFF;
-            int blue = coverImageBytes[i + 2] & 0xFF;
-
-            int greenPattern = (green >> 1) & 0b11;
-            int bluePattern = (blue >> 1) & 0b11;
-
-            changeCountMap.put(bluePattern, changeCountMap.getOrDefault(bluePattern, 0));
-            changeCountMap.put(greenPattern, changeCountMap.getOrDefault(greenPattern, 0));
-            changeCountMap.put(bluePattern + 100, changeCountMap.getOrDefault(bluePattern + 100, 0));
-            changeCountMap.put(greenPattern + 100, changeCountMap.getOrDefault(greenPattern + 100, 0));
-
-            for (int j = 0; j < 2 && messageIndex < dataToCover.length; j++) {
-                int bitToEmbed = (dataToCover[messageIndex] >> bitIndex) & 1;
-
-                if (j == 0) {
-                    if (green != ((green & ~1) | bitToEmbed)) {
-                        changeCountMap.put(greenPattern, changeCountMap.getOrDefault(greenPattern, 0) + 1);
-                    } else {
-                        changeCountMap.put(greenPattern + 100, changeCountMap.getOrDefault(greenPattern + 100, 0) + 1);
-                    }
-                    green = (green & ~1) | bitToEmbed;
-                } else {
-                    if (blue != ((blue & ~1) | bitToEmbed)) {
-                        changeCountMap.put(bluePattern, changeCountMap.getOrDefault(bluePattern, 0) + 1);
-                    } else {
-                        changeCountMap.put(bluePattern + 100, changeCountMap.getOrDefault(bluePattern + 100, 0) + 1);
-                    }
-                    blue = (blue & ~1) | bitToEmbed;
-                }
-
-                bitIndex++;
-                if (bitIndex == 8) {
-                    bitIndex = 0;
-                    messageIndex++;
-                }
+        // First pass: embed data and collect statistics
+        while (secretBitIndex < secretData.length * 8 && startOffset < stegoImage.length) {
+            // Skip red channel
+            if (pixelCounter % 3 == 1) {
+                startOffset++;
+                pixelCounter++;
+                continue;
             }
 
-            coverImageBytes[i] = (byte) green;
-            coverImageBytes[i + 2] = (byte) blue;
-        }
+            // Get the current bit from secret data
+            int byteIndex = secretBitIndex / 8;
+            int bitOffset = 7 - (secretBitIndex % 8);
+            int secretBit = (secretData[byteIndex] >> bitOffset) & 1;
 
-        // Store inversion state for each pattern in separate bytes
-        for (int pattern = 0; pattern < 4; pattern++) {
-            int changes = changeCountMap.getOrDefault(pattern, 0);
-                int nonChanges = changeCountMap.getOrDefault(pattern + 100, 0);
+            // Get the pattern from bits 2-3 (counting from behind)
+            int pattern = (stegoImage[startOffset] >> 1) & 0b11;
 
-                // Store 1 if pattern needs inversion (more changes than non-changes)
-                byte inversionState = (changes + nonChanges > 1 && changes > nonChanges) ? (byte)1 : (byte)0;
-                coverImageBytes[imageByteOffset + pattern] = inversionState;
+            // Get original LSB
+            int originalLSB = stegoImage[startOffset] & 1;
 
-                // If inversion is needed, invert all LSBs for this pattern
-                if (inversionState == 1) {
-                    for (int i = startOffset; i < coverImageBytes.length; i += 3) {
-                    int green = coverImageBytes[i] & 0xFF;
+            // Set the LSB
+            stegoImage[startOffset] = (byte) ((stegoImage[startOffset] & 0xFE) | secretBit);
 
-                    if (((green >> 1) & 0b11) == pattern) {
-                        green ^= 1;
-                    }
-
-                    if (i + 2 < coverImageBytes.length) {
-                        int blue = coverImageBytes[i + 2] & 0xFF;
-                        if (((blue >> 1) & 0b11) == pattern) {
-                            blue ^= 1;
-                        }
-                        coverImageBytes[i + 2] = (byte) blue;
-                    }
-
-                    coverImageBytes[i] = (byte) green;
-                }
+            // Update statistics
+            if (originalLSB != secretBit) {
+                patternStats[pattern][0]++; // changed
+            } else {
+                patternStats[pattern][1]++; // unchanged
             }
+
+            secretBitIndex++;
+            pixelCounter++;
+            startOffset++;
         }
 
-        return coverImageBytes;
+        // Determine which patterns need inversion
+        boolean[] patternInversion = new boolean[4];
+        for (int i = 0; i < 4; i++) {
+            patternInversion[i] = patternStats[i][0] > patternStats[i][1];
+        }
+
+        // Second pass: apply pattern inversions
+        startOffset = pixelDataOffset + 4;
+        pixelCounter = 0;
+        secretBitIndex = 0;
+
+        while (secretBitIndex < secretData.length * 8 && startOffset < stegoImage.length) {
+            // Skip red channel
+            if (pixelCounter % 3 == 1) {
+                startOffset++;
+                pixelCounter++;
+                continue;
+            }
+
+            // Get the pattern
+            int pattern = (stegoImage[startOffset] >> 1) & 0b11;
+
+            // If this pattern should be inverted, flip the LSB
+            if (patternInversion[pattern]) {
+                stegoImage[startOffset] ^= 1;
+            }
+
+            secretBitIndex++;
+            pixelCounter++;
+            startOffset++;
+        }
+
+        // Store pattern inversion flags in the first 4 bytes of pixel data
+        for (int i = 0; i < 4; i++) {
+            stegoImage[pixelDataOffset + i] = (byte) ((stegoImage[pixelDataOffset + i] & 0xFE) | (patternInversion[i] ? 1 : 0));
+        }
+
+        // Write the stego image to the output file
+        Files.write(new File(outputPath).toPath(), stegoImage);
     }
 
     @Override
