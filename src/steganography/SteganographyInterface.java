@@ -26,14 +26,6 @@ public sealed interface SteganographyInterface permits LSB1Steganography, LSB4St
     byte[] decode(String stegoImagePath) throws IOException;
 
     /**
-     *
-     * @param stegoImagePath
-     * @return
-     * @throws IOException
-     */
-    String getFileExtension(String stegoImagePath) throws IOException;
-
-    /**
      * Converts byte array to binary string
      * @param data Byte array to convert
      * @return Binary string representation

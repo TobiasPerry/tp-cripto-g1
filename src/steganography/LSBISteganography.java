@@ -188,48 +188,4 @@ public final class LSBISteganography implements SteganographyInterface {
 
         return extractedData;
     }
-
-
-    // Optional: Store inversion map data for future decoding
-    // Encode the map at a specific location or as metadata if necessary.
-
-    @Override
-    public String getFileExtension(String stegoImagePath) throws IOException {
-        byte[] imageBytes = Files.readAllBytes(new File(stegoImagePath).toPath());
-
-        int pixelDataOffset = ((imageBytes[10] & 0xFF)) |
-                ((imageBytes[11] & 0xFF) << 8) |
-                ((imageBytes[12] & 0xFF) << 16) |
-                ((imageBytes[13] & 0xFF) << 24);
-
-        int imageByteOffset = pixelDataOffset;
-
-        int fileSize = 0;
-        for (int i = 0; i < INT_SIZE; i++) {
-            int bit = imageBytes[imageByteOffset] & 1;
-            fileSize |= (bit << i);
-            imageByteOffset++;
-        }
-
-        imageByteOffset += fileSize * BITS_IN_BYTE;
-
-        StringBuilder extension = new StringBuilder();
-        while (true) {
-            int b = 0;
-            for (int i = 7; i >= 0; i--) {
-                if (imageByteOffset >= imageBytes.length) {
-                    throw new IllegalArgumentException("Not enough data in image to extract file extension");
-                }
-                int bit = imageBytes[imageByteOffset] & 1;
-                b |= (bit << i);
-                imageByteOffset++;
-            }
-            if (b == 0) {
-                break;
-            }
-            extension.append((char) b);
-        }
-
-        return extension.toString();
-    }
 }
