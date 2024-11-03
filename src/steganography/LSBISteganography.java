@@ -42,84 +42,61 @@ public final class LSBISteganography implements SteganographyInterface {
         // Map to count changes for each pattern. + 0 for changed, +100 for not changed
         Map<Integer, Integer> changeCountMap = new HashMap<>();
 
-        int messageIndex = 0;
-        int bitIndex = 0;
-
         // Skip first 4 bytes of pixel data (will store pattern information here later)
         int startOffset = imageByteOffset + 4;
 
-        // First pass: Embed data and count changes
-        for (int i = startOffset; i < coverImageBytes.length && messageIndex < dataToCover.length; i += 3) {
+        int pixel = 0; // To ensure we skip the red channels
 
-            //After the 4 pattern bits, I am in a green channel
-            int green = coverImageBytes[i] & 0xFF;
-            int blue = coverImageBytes[i + 2] & 0xFF;
-
-            int greenPattern = (green >> 1) & 0b11;
-            int bluePattern = (blue >> 1) & 0b11;
-
-            changeCountMap.put(bluePattern, changeCountMap.getOrDefault(bluePattern, 0));
-            changeCountMap.put(greenPattern, changeCountMap.getOrDefault(greenPattern, 0));
-            changeCountMap.put(bluePattern + 100, changeCountMap.getOrDefault(bluePattern + 100, 0));
-            changeCountMap.put(greenPattern + 100, changeCountMap.getOrDefault(greenPattern + 100, 0));
-
-            for (int j = 0; j < 2 && messageIndex < dataToCover.length; j++) {
-                int bitToEmbed = (dataToCover[messageIndex] >> bitIndex) & 1;
-
-                if (j == 0) {
-                    if (green != ((green & ~1) | bitToEmbed)) {
-                        changeCountMap.put(greenPattern, changeCountMap.getOrDefault(greenPattern, 0) + 1);
-                    } else {
-                        changeCountMap.put(greenPattern + 100, changeCountMap.getOrDefault(greenPattern + 100, 0) + 1);
-                    }
-                    green = (green & ~1) | bitToEmbed;
-                } else {
-                    if (blue != ((blue & ~1) | bitToEmbed)) {
-                        changeCountMap.put(bluePattern, changeCountMap.getOrDefault(bluePattern, 0) + 1);
-                    } else {
-                        changeCountMap.put(bluePattern + 100, changeCountMap.getOrDefault(bluePattern + 100, 0) + 1);
-                    }
-                    blue = (blue & ~1) | bitToEmbed;
-                }
-
-                bitIndex++;
-                if (bitIndex == 8) {
-                    bitIndex = 0;
-                    messageIndex++;
-                }
+        for (byte b : dataToCover) {
+            if (pixel % 3 == 1) {
+                pixel++;
+                startOffset++;
+                continue;
             }
 
-            coverImageBytes[i] = (byte) green;
-            coverImageBytes[i + 2] = (byte) blue;
+            int pattern = (coverImageBytes[startOffset] >> 1) & 0b11;
+            boolean changed = false;
+
+            for (int i = 7; i >= 0; i--) {
+                int bit = (b >> i) & 1; // Big-endian order
+                if (i == 0) {
+                    changed = (byte) ((coverImageBytes[startOffset] & 0xFF)) != (byte) ((coverImageBytes[startOffset] & 0xFE) | bit);
+                }
+                coverImageBytes[startOffset] = (byte) ((coverImageBytes[startOffset] & 0xFE) | bit);
+                startOffset++;
+            }
+
+            if (changed) {
+                changeCountMap.put(pattern, changeCountMap.getOrDefault(pattern, 0) + 1);
+            } else {
+                changeCountMap.put(pattern + 100, changeCountMap.getOrDefault(pattern + 100, 0) + 1);
+            }
+            pixel++;
         }
 
         // Store inversion state for each pattern in separate bytes
         for (int pattern = 0; pattern < 4; pattern++) {
             int changes = changeCountMap.getOrDefault(pattern, 0);
-                int nonChanges = changeCountMap.getOrDefault(pattern + 100, 0);
+            int nonChanges = changeCountMap.getOrDefault(pattern + 100, 0);
 
-                // Store 1 if pattern needs inversion (more changes than non-changes)
-                byte inversionState = (changes + nonChanges > 1 && changes > nonChanges) ? (byte)1 : (byte)0;
-                coverImageBytes[imageByteOffset + pattern] = inversionState;
+            // Store 1 if pattern needs inversion (more changes than non-changes)
+            boolean inversionState = changes + nonChanges > 1 && changes > nonChanges;
+            coverImageBytes[imageByteOffset + pattern] = inversionState ? (byte) ((coverImageBytes[imageByteOffset + pattern] & 0xFE) | 1) : (byte) ((coverImageBytes[imageByteOffset + pattern] & 0xFE) | 0);
 
-                // If inversion is needed, invert all LSBs for this pattern
-                if (inversionState == 1) {
-                    for (int i = startOffset; i < coverImageBytes.length; i += 3) {
-                    int green = coverImageBytes[i] & 0xFF;
-
-                    if (((green >> 1) & 0b11) == pattern) {
-                        green ^= 1;
+            int secondPassOffset = imageByteOffset + 4;
+            // If inversion is needed, invert all LSBs for this pattern
+            if (inversionState) {
+                for (byte b : coverImageBytes) {
+                    if (pixel % 3 == 1 || ((coverImageBytes[secondPassOffset] >> 1) & 0b11) != pattern) {
+                        pixel++;
+                        secondPassOffset++;
+                        continue;
                     }
 
-                    if (i + 2 < coverImageBytes.length) {
-                        int blue = coverImageBytes[i + 2] & 0xFF;
-                        if (((blue >> 1) & 0b11) == pattern) {
-                            blue ^= 1;
-                        }
-                        coverImageBytes[i + 2] = (byte) blue;
-                    }
-
-                    coverImageBytes[i] = (byte) green;
+                    byte newByte = (b ^= 1);
+                    coverImageBytes[secondPassOffset] = newByte;
+                    secondPassOffset += 1;
+                    pixel++;
                 }
             }
         }
