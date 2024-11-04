@@ -143,7 +143,6 @@ public class Main {
 
             // Read the ciphertext size
             int ciphertextSize = dis.readInt();
-            System.out.println("Ciphertext size: " + ciphertextSize);
 
             // Read the encrypted data
             byte[] encryptedData = new byte[ciphertextSize];
@@ -161,7 +160,6 @@ public class Main {
         DataInputStream dataDis = new DataInputStream(dataBais);
 
         int realSize = dataDis.readInt();
-        System.out.println("Real size: " + realSize);
 
         if (realSize + 4 > decryptedData.length) {
             throw new IllegalArgumentException("Real size is greater than the data size");
@@ -174,13 +172,10 @@ public class Main {
         // Read the extension until '\0'
         ByteArrayOutputStream extBaos = new ByteArrayOutputStream();
         int b;
-        System.out.println("Reading extension");
         while ((b = dataDis.read()) != -1 && b != 0) {
-            System.out.println("Read byte: " + b);
             extBaos.write(b);
         }
         String extension = extBaos.toString("UTF-8");
-        System.out.println("Extracted extension: " + extension);
 
         // Save the extracted file
         saveFile(fileData, out, extension);
@@ -190,13 +185,11 @@ public class Main {
     private static void verifyArgs() {
         if (embed) {
             if (in == null || p == null || out == null || steg == null) {
-                System.out.println("Missing arguments");
-                System.exit(1);
+                throw new IllegalArgumentException("Missing arguments");
             }
         } else {
             if (p == null || out == null || steg == null) {
-                System.out.println("Missing arguments");
-                System.exit(1);
+                throw new IllegalArgumentException("Missing arguments");
             }
         }
     }
