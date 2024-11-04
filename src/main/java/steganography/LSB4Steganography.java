@@ -1,13 +1,9 @@
 package steganography;
 
-import utils.Utils;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.Path;
 
 public final class LSB4Steganography implements SteganographyInterface {
 

@@ -3,6 +3,7 @@ import steganography.LSB1Steganography;
 import steganography.LSB4Steganography;
 import steganography.LSBISteganography;
 import steganography.SteganographyInterface;
+
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;

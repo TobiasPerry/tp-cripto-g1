@@ -1,13 +1,10 @@
 package steganography;
 
-import utils.Utils;
-
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
+import java.util.Arrays;
 
 public final class LSBISteganography implements SteganographyInterface {
 

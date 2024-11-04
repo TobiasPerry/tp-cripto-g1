@@ -1,7 +1,6 @@
 package steganography;
 
 import java.io.ByteArrayOutputStream;
-import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 
