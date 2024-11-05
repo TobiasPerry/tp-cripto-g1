@@ -29,7 +29,6 @@ public class Main {
     private static boolean embed = false;
 
     public static void main(String[] args) throws Exception {
-        // Process command-line arguments
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case EMBED:
@@ -165,7 +164,6 @@ public class Main {
             throw new IllegalArgumentException("Real size is greater than the data size");
         }
 
-        // Read the file data
         byte[] fileData = new byte[realSize];
         dataDis.readFully(fileData);
 
