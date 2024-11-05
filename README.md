@@ -20,7 +20,7 @@ This project provides a tool to hide and extract files within BMP images using v
 
 ## Prerequisites
 
-- Java Development Kit (JDK) 8 or higher
+- Java Development Kit (JDK) 21.0.4
 - Maven
 
 ## Building the Project
