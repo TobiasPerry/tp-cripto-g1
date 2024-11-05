@@ -50,12 +50,9 @@ public class Crypto {
             default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         }
 
-        // Define padding type based on mode
         String padding = (mode.equals("CFB") || mode.equals("OFB")) ? "NoPadding" : "PKCS5Padding";
-
         transformation = switch (algorithm) {
             case "aes128", "aes192", "aes256" -> String.format("AES/%s/%s", mode, padding);
-            case "des" -> String.format("DES/%s/%s", mode, padding);
             case "3des" -> String.format("DESede/%s/%s", mode, padding);
             default -> throw new IllegalArgumentException("Unsupported transformation configuration");
         };
@@ -78,7 +75,7 @@ public class Crypto {
 
     private byte[] deriveIv() throws Exception {
         if (mode.equals("ECB")) {
-            return new byte[0]; // No IV needed for ECB mode
+            return new byte[0];
         }
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
         KeySpec spec = new PBEKeySpec((password + "IV").toCharArray(), salt, 10000, ivLength * 8);
@@ -93,7 +90,6 @@ public class Crypto {
         SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
 
-        // Initialize cipher based on mode
         if ("ECB".equalsIgnoreCase(mode)) {
             cipher.init(Cipher.ENCRYPT_MODE, key);
         } else {
