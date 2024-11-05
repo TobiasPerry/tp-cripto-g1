@@ -30,7 +30,6 @@ public class Crypto {
     }
 
     private void configureAlgorithm() {
-        // Configure key and IV lengths based on the algorithm
         switch (algorithm) {
             case "aes128" -> {
                 keyLength = 128;
@@ -44,10 +43,6 @@ public class Crypto {
                 keyLength = 256;
                 ivLength = 16;
             }
-            case "des" -> {
-                keyLength = 64;
-                ivLength = 8;
-            }
             case "3des" -> {
                 keyLength = 192;
                 ivLength = 8;
@@ -55,13 +50,9 @@ public class Crypto {
             default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         }
 
-        // Define padding type based on mode
         String padding = (mode.equals("CFB") || mode.equals("OFB")) ? "NoPadding" : "PKCS5Padding";
-
-        // Construct the transformation string
         transformation = switch (algorithm) {
             case "aes128", "aes192", "aes256" -> String.format("AES/%s/%s", mode, padding);
-            case "des" -> String.format("DES/%s/%s", mode, padding);
             case "3des" -> String.format("DESede/%s/%s", mode, padding);
             default -> throw new IllegalArgumentException("Unsupported transformation configuration");
         };
@@ -70,30 +61,35 @@ public class Crypto {
     private SecretKey generateSecretKey(byte[] keyBytes) throws Exception {
         return switch (algorithm) {
             case "aes128", "aes192", "aes256" -> new SecretKeySpec(keyBytes, "AES");
-            case "des" -> new SecretKeySpec(keyBytes, "DES");
             case "3des" -> new SecretKeySpec(keyBytes, "DESede");
             default -> throw new IllegalArgumentException("Unsupported algorithm");
         };
     }
 
-    private byte[] deriveKeyAndIv() throws Exception {
-        // Generate key and IV using PBKDF2
-        int totalKeyLength = keyLength + (mode.equals("ECB") ? 0 : ivLength * 8);
+    private byte[] deriveKey() throws Exception {
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, totalKeyLength);
+        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, keyLength);
+        SecretKey tmp = factory.generateSecret(spec);
+        return tmp.getEncoded();
+    }
+
+    private byte[] deriveIv() throws Exception {
+        if (mode.equals("ECB")) {
+            return new byte[0]; // No IV needed for ECB mode
+        }
+        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+        KeySpec spec = new PBEKeySpec((password + "IV").toCharArray(), salt, 10000, ivLength * 8);
         SecretKey tmp = factory.generateSecret(spec);
         return tmp.getEncoded();
     }
 
     public byte[] encryptData(byte[] data) throws Exception {
-        byte[] keyAndIV = deriveKeyAndIv();
-        byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
-        byte[] ivBytes = mode.equals("ECB") ? new byte[ivLength / 8] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength) / 8);
+        byte[] keyBytes = deriveKey();
+        byte[] ivBytes = deriveIv();
 
         SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
 
-        // Initialize cipher based on mode
         if ("ECB".equalsIgnoreCase(mode)) {
             cipher.init(Cipher.ENCRYPT_MODE, key);
         } else {
@@ -105,14 +101,12 @@ public class Crypto {
     }
 
     public byte[] decryptData(byte[] data) throws Exception {
-        byte[] keyAndIV = deriveKeyAndIv();
-        byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
-        byte[] ivBytes = mode.equals("ECB") ? new byte[ivLength / 8] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength) / 8);
+        byte[] keyBytes = deriveKey();
+        byte[] ivBytes = deriveIv();
 
         SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
 
-        // Initialize cipher based on mode
         if ("ECB".equalsIgnoreCase(mode)) {
             cipher.init(Cipher.DECRYPT_MODE, key);
         } else {
