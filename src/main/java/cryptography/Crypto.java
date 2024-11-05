@@ -6,6 +6,7 @@ import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
+import java.security.Security;
 import java.security.spec.KeySpec;
 import java.util.Arrays;
 
@@ -50,7 +51,9 @@ public class Crypto {
             default -> throw new IllegalArgumentException("Unsupported algorithm: " + algorithm);
         }
 
-        String padding = (mode.equals("CFB") || mode.equals("OFB")) ? "NoPadding" : "PKCS5Padding";
+        String padding = (mode.startsWith("CFB") || mode.startsWith("OFB")) ? "NoPadding" : "PKCS5Padding";
+
+
         transformation = switch (algorithm) {
             case "aes128", "aes192", "aes256" -> String.format("AES/%s/%s", mode, padding);
             case "3des" -> String.format("DESede/%s/%s", mode, padding);
@@ -66,26 +69,19 @@ public class Crypto {
         };
     }
 
-    private byte[] deriveKey() throws Exception {
-        SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, keyLength);
-        SecretKey tmp = factory.generateSecret(spec);
-        return tmp.getEncoded();
-    }
+    private byte[] deriveKeyAndIv() throws Exception {
 
-    private byte[] deriveIv() throws Exception {
-        if (mode.equals("ECB")) {
-            return new byte[0];
-        }
+        int totalKeyLength = keyLength + (mode.equals("ECB") ? 0 : ivLength * 8); 
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
-        KeySpec spec = new PBEKeySpec((password + "IV").toCharArray(), salt, 10000, ivLength * 8);
+        KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 10000, totalKeyLength);
         SecretKey tmp = factory.generateSecret(spec);
         return tmp.getEncoded();
     }
 
     public byte[] encryptData(byte[] data) throws Exception {
-        byte[] keyBytes = deriveKey();
-        byte[] ivBytes = deriveIv();
+        byte[] keyAndIV = deriveKeyAndIv();
+        byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
+        byte[] ivBytes = mode.equals("ECB") ? new byte[0] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength * 8) / 8);
 
         SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
@@ -101,8 +97,9 @@ public class Crypto {
     }
 
     public byte[] decryptData(byte[] data) throws Exception {
-        byte[] keyBytes = deriveKey();
-        byte[] ivBytes = deriveIv();
+        byte[] keyAndIV = deriveKeyAndIv();
+        byte[] keyBytes = Arrays.copyOfRange(keyAndIV, 0, keyLength / 8);
+        byte[] ivBytes = mode.equals("ECB") ? new byte[0] : Arrays.copyOfRange(keyAndIV, keyLength / 8, (keyLength + ivLength * 8) / 8);
 
         SecretKey key = generateSecretKey(keyBytes);
         Cipher cipher = Cipher.getInstance(transformation);
