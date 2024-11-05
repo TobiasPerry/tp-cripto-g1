@@ -7,7 +7,6 @@ import java.nio.file.Files;
 
 public final class LSB4Steganography implements SteganographyInterface {
 
-    private static final int INT_SIZE = 32; // Number of bits in an integer
     private static final int BITS_IN_BYTE = 8;
     private static final int BITS_TO_EMBED = 4; // Number of bits to embed per byte
 
@@ -35,9 +34,8 @@ public final class LSB4Steganography implements SteganographyInterface {
 
         int imageByteOffset = pixelDataOffset;
 
-        // **Embedding Process**
 
-        // 1. Embed the file size (32 bi        // 2. Embed the actual data
+        // Embed the data
         for (byte b : data) {
             for (int i = 0; i < BITS_IN_BYTE; i += BITS_TO_EMBED) {
                 int bits = (b >> (BITS_IN_BYTE - BITS_TO_EMBED - i)) & 0x0F;
@@ -46,7 +44,6 @@ public final class LSB4Steganography implements SteganographyInterface {
             }
         }
 
-        // Write the modified image bytes to the output file
         Files.write(new File(outputPath).toPath(), imageBytes);
     }
 
@@ -63,8 +60,6 @@ public final class LSB4Steganography implements SteganographyInterface {
 
         int imageByteOffset = pixelDataOffset;
 
-
-        // Extract the embedded data
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         int bitCount = 0;
         int currentByte = 0;
@@ -87,7 +82,7 @@ public final class LSB4Steganography implements SteganographyInterface {
             imageByteOffset++;
         }
 
-        // The extracted data
+        // The  data
         byte[] extractedData = baos.toByteArray();
 
         return extractedData;

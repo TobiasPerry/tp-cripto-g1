@@ -58,7 +58,6 @@ public class Crypto {
         // Define padding type based on mode
         String padding = (mode.equals("CFB") || mode.equals("OFB")) ? "NoPadding" : "PKCS5Padding";
 
-        // Construct the transformation string
         transformation = switch (algorithm) {
             case "aes128", "aes192", "aes256" -> String.format("AES/%s/%s", mode, padding);
             case "des" -> String.format("DES/%s/%s", mode, padding);

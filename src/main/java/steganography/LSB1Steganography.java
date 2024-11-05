@@ -59,8 +59,6 @@ public final class LSB1Steganography implements SteganographyInterface {
 
         int imageByteOffset = pixelDataOffset;
 
-        // **Decoding Process**
-
         // Extract the embedded data
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         int bitCount = 0;
@@ -80,7 +78,6 @@ public final class LSB1Steganography implements SteganographyInterface {
             imageByteOffset++;
         }
 
-        // The extracted data
         byte[] extractedData = baos.toByteArray();
 
         return extractedData;

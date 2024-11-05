@@ -8,8 +8,6 @@ import java.util.Arrays;
 
 public final class LSBISteganography implements SteganographyInterface {
 
-    private static final int INT_SIZE = 32; // Number of bits in an integer
-    private static final int BITS_IN_BYTE = 8;
 
     @Override
     public void encode(String coverImagePath, byte[] secretData, String outputPath) throws IOException {
@@ -25,7 +23,7 @@ public final class LSBISteganography implements SteganographyInterface {
         // Create a copy of the image to modify
         byte[] stegoImage = Arrays.copyOf(imageBytes, imageBytes.length);
 
-        // We'll need to store 4 bits for pattern inversion flags
+        // 4 bits for pattern inversion flags
         int availableCapacity = (imageBytes.length - pixelDataOffset - 4) * 2 / 3; // Only Blue and Green channels
         if (secretData.length > availableCapacity) {
             throw new IllegalArgumentException("Secret data is too large for this cover image");
@@ -39,7 +37,7 @@ public final class LSBISteganography implements SteganographyInterface {
         // Arrays to count pattern statistics
         int[][] patternStats = new int[4][2]; // [pattern][changed/unchanged]
 
-        // First pass: embed data and collect statistics
+        // First pass
         while (secretBitIndex < secretData.length * 8 && startOffset < stegoImage.length) {
             // Skip red channel
             if (pixelCounter % 3 == 1) {
@@ -111,7 +109,6 @@ public final class LSBISteganography implements SteganographyInterface {
             stegoImage[pixelDataOffset + i] = (byte) ((stegoImage[pixelDataOffset + i] & 0xFE) | (patternInversion[i] ? 1 : 0));
         }
 
-        // Write the stego image to the output file
         Files.write(new File(outputPath).toPath(), stegoImage);
     }
 
@@ -170,9 +167,7 @@ public final class LSBISteganography implements SteganographyInterface {
             startOffset++;
         }
 
-        // The extracted data
         byte[] extractedData = baos.toByteArray();
-
 
         return extractedData;
     }
